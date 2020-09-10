@@ -22,10 +22,11 @@ parameter_types! {
 }
 
 impl system::Trait for Test {
+	type BaseCallFilter = ();
 	type Origin = Origin;
-	type Call = ();
 	type Index = u64;
 	type BlockNumber = u64;
+	type Call = ();
 	type Hash = H256;
 	type Hashing = BlakeTwo256;
 	type AccountId = u64;
@@ -37,13 +38,15 @@ impl system::Trait for Test {
 	type DbWeight = ();
 	type BlockExecutionWeight = ();
 	type ExtrinsicBaseWeight = ();
-	type MaximumBlockLength = MaximumBlockLength;
+	type MaximumExtrinsicWeight = MaximumBlockWeight;
 	type AvailableBlockRatio = AvailableBlockRatio;
+	type MaximumBlockLength = MaximumBlockLength;
 	type Version = ();
 	type ModuleToIndex = ();
 	type AccountData = balances::AccountData<u128>;
 	type OnNewAccount = ();
 	type OnKilledAccount = ();
+	type SystemWeightInfo = ();
 }
 
 parameter_types! {
@@ -56,6 +59,7 @@ impl balances::Trait for Test {
 	type Event = ();
 	type ExistentialDeposit = ExistentialDeposit;
 	type AccountStore = system::Module<Test>;
+	type WeightInfo = ();
 }
 
 impl Trait for Test {
