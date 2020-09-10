@@ -261,6 +261,7 @@ impl pallet_sudo::Trait for Runtime {
 /// Configure the pallet template in pallets/template.
 impl swap::Trait for Runtime {
 	type Event = Event;
+	type Price = u128;
 }
 
 /// Configure the pallet template in pallets/template.

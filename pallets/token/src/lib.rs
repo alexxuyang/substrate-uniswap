@@ -84,13 +84,19 @@ decl_module! {
 
 		#[weight = 200_000]
         pub fn issue(origin, symbol: Vec<u8>, total_supply: T::Balance) -> dispatch::DispatchResult {
-            Self::do_issue(origin, symbol, total_supply)
+			let sender = ensure_signed(origin)?;
+
+            let hash = Self::do_issue(sender.clone(), symbol, total_supply)?;
+            Self::deposit_event(RawEvent::Issued(sender, hash.clone(), total_supply));
+
+            Ok(())
         }
 
 		#[weight = 200_000]
         pub fn transfer(origin, token_hash: T::Hash, to: T::AccountId, amount: T::Balance, memo: Option<Vec<u8>>)
             -> dispatch::DispatchResult {
             let sender = ensure_signed(origin)?;
+
             Self::do_transfer(sender.clone(), token_hash, to.clone(), amount, memo)?;
             Self::deposit_event(RawEvent::Transferd(sender, to, token_hash, amount));
 
@@ -100,9 +106,7 @@ decl_module! {
 }
 
 impl<T: Trait> Module<T> {
-	pub fn do_issue(origin: T::Origin, symbol: Vec<u8>, total_supply: T::Balance) -> dispatch::DispatchResult {
-		let sender = ensure_signed(origin)?;
-
+	pub fn do_issue(sender: T::AccountId, symbol: Vec<u8>, total_supply: T::Balance) -> Result<T::Hash, dispatch::DispatchError> {
 		let nonce = Nonce::get();
 
 		let random_seed = <randomness_collective_flip::Module<T>>::random_seed();
@@ -125,9 +129,7 @@ impl<T: Trait> Module<T> {
 		OwnedTokens::<T>::insert((sender.clone(), owned_token_index), hash);
 		OwnedTokensIndex::<T>::insert(sender.clone(), owned_token_index + 1);
 
-		Self::deposit_event(RawEvent::Issued(sender, hash.clone(), total_supply));
-
-		Ok(())
+		Ok(hash)
 	}
 
 	pub fn do_transfer(
