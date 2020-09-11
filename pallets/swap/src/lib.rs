@@ -1,9 +1,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use sp_std::result;
-use sp_runtime::{traits::{Bounded, Member, Zero, CheckedSub, Hash, AtLeast32Bit}};
+use sp_runtime::{traits::{Bounded, Member, Zero, Hash, AtLeast32Bit}};
 use frame_support::{decl_module, decl_storage, decl_event, decl_error, dispatch, Parameter,
-					ensure, traits::{Get, Randomness}};
+					ensure, traits::{Randomness, Currency}};
 use frame_system::ensure_signed;
 use sp_io::hashing::blake2_256;
 
@@ -18,6 +17,7 @@ mod tests;
 pub trait Trait: token::Trait + frame_system::Trait {
 	type Event: From<Event<Self>> + Into<<Self as frame_system::Trait>::Event>;
 	type Price: Parameter + Default + Member + Bounded + AtLeast32Bit + Copy + From<u128> + Into<u128>;
+	type Currency: Currency<Self::AccountId>;
 }
 
 #[derive(Encode, Decode, Clone, PartialEq, Eq)]
@@ -26,7 +26,8 @@ pub struct TradePair<T> where T: Trait {
 	hash: T::Hash,
 	base: T::Hash,
 	quote: T::Hash,
-	lp_token_hash: T::Hash,
+	liquidity_token_hash: T::Hash,
+	liquidity_token_issued_amount: T::Balance,
 	account: T::AccountId,
 }
 
@@ -35,6 +36,8 @@ pub enum OrderType {
 	Buy, // give base, get quote
 	Sell,
 }
+
+pub type BalanceOf<T> = <<T as Trait>::Currency as Currency<<T as frame_system::Trait>::AccountId>>::Balance;
 
 decl_storage! {
 	trait Store for Module<T: Trait> as TemplateModule {
@@ -56,9 +59,14 @@ decl_event!(
 	where
 		<T as frame_system::Trait>::AccountId,
 		<T as frame_system::Trait>::Hash,
+		// Balance = <<T as Trait>::Currency as Currency<<T as frame_system::Trait>::AccountId>>::Balance,
 		TradePair = TradePair<T>,
 	{
 		TradePairCreated(AccountId, Hash, TradePair),
+		LiquidityAdded(AccountId, Hash),
+		LiquidityRemoved(AccountId, Hash),
+		SwapBuy(AccountId, Hash),
+		SwapSell(AccountId, Hash),
 	}
 );
 
@@ -74,6 +82,26 @@ decl_error! {
         TradePairExisted,
         /// No matching trade pair found
         NoMatchingTradePair,
+        /// Liquidity base & quote proportion is not same as pool's
+        LiquidityProportionInvalid,
+        /// Quote amount is none in init step of adding liquidity
+        QuoteAmountIsNone,
+        /// Base amount is zero
+        BaseAmountIsZero,
+        /// Qutoe amount is zero
+        QuoteAmountIsZero,
+        /// Liquidity minted amount is zero
+        LiquidityMintedIsZero,
+        /// 
+        LiquidityTokenAmountOverflow,
+        ///
+        LiquidityTokenAmountIsZero,
+        ///
+        LiquidityTokenIssuedAmountIsZero,
+        ///
+        PoolBaseAmountIsZero,
+        ///
+        PoolQuoteAmountIsZero,
 	}
 }
 
@@ -91,10 +119,31 @@ decl_module! {
 		}
 
 		#[weight = 10_000]
-		pub fn add_liquidity(origin, hash: T::Hash, base_amount: T::Balance, quote_amount: T::Balance) -> dispatch::DispatchResult {
+		pub fn add_liquidity(origin, hash: T::Hash, base_amount: T::Balance, o_quote_amount: Option<T::Balance>) -> dispatch::DispatchResult {
 			let sender = ensure_signed(origin)?;
 
-			Self::do_add_liquidity(sender, hash, base_amount, quote_amount)
+			Self::do_add_liquidity(sender, hash, base_amount, o_quote_amount)
+		}
+
+		#[weight = 10_000]
+		pub fn remove_liquidity(origin, hash: T::Hash, liquidity_token_amount: T::Balance) -> dispatch::DispatchResult {
+			let sender = ensure_signed(origin)?;
+
+			Self::do_remove_liquidity(sender, hash, liquidity_token_amount)
+		}
+
+		#[weight = 10_000]
+		pub fn swap_buy(origin, hash: T::Hash, base_amount: T::Balance) -> dispatch::DispatchResult {
+			let sender = ensure_signed(origin)?;
+
+			Self::do_swap_buy(sender, hash, base_amount)
+		}
+
+		#[weight = 10_000]
+		pub fn swap_sell(origin, hash: T::Hash, quote_amount: T::Balance) -> dispatch::DispatchResult {
+			let sender = ensure_signed(origin)?;
+
+			Self::do_swap_sell(sender, hash, quote_amount)
 		}
 	}
 }
@@ -128,10 +177,11 @@ impl<T: Trait> Module<T> {
 		let account = Self::derivative_account_id(base, quote, hash);
 
 		// todo: provide real symbol string
-		let lp_token_hash = <token::Module<T>>::do_issue(sender.clone(), b"lp_token_hash".to_vec(), T::Balance::max_value())?;
+		let liquidity_token_hash = <token::Module<T>>::do_issue(account.clone(), b"lt_hash".to_vec(), T::Balance::max_value())?;
 
 		let tp = TradePair {
-			hash, base, quote, account, lp_token_hash
+			hash, base, quote, account, liquidity_token_hash,
+			liquidity_token_issued_amount: Zero::zero(),
 		};
 
 		Nonce::mutate(|n| *n += 1);
@@ -147,20 +197,138 @@ impl<T: Trait> Module<T> {
 		Ok(())
 	}
 
-	pub fn derivative_account_id(base: T::Hash, quote: T::Hash, hash: T::Hash) -> T::AccountId {
+	fn derivative_account_id(base: T::Hash, quote: T::Hash, hash: T::Hash) -> T::AccountId {
 		let entropy = (b"substrate/uniswap", base, quote, hash).using_encoded(blake2_256);
 		T::AccountId::decode(&mut &entropy[..]).unwrap_or_default()
 	}
 
-	fn do_add_liquidity(sender: T::AccountId, hash: T::Hash, base_amount: T::Balance, quote_amount: T::Balance) -> dispatch::DispatchResult {
+	fn do_add_liquidity(sender: T::AccountId, hash: T::Hash, base_amount: T::Balance, o_quote_amount: Option<T::Balance>) -> dispatch::DispatchResult {
+		let mut tp = Self::trade_pair(hash).ok_or(Error::<T>::NoMatchingTradePair)?;
+
+		ensure!(base_amount > Zero::zero(), Error::<T>::BaseAmountIsZero);
+		<token::Module<T>>::ensure_free_balance(sender.clone(), tp.base, base_amount)?;
+
+		let pool_base_amount = <token::Module<T>>::balance_of((tp.account.clone(), tp.base));
+		let pool_quote_amount = <token::Module<T>>::balance_of((tp.account.clone(), tp.quote));
+
+		let quote_amount;
+		let liquidity_minted;
+
+		if pool_quote_amount == Zero::zero() || tp.liquidity_token_issued_amount == Zero::zero() { // init add liquidity
+			ensure!(o_quote_amount.is_some(), Error::<T>::QuoteAmountIsNone);
+			quote_amount = o_quote_amount.unwrap();
+			liquidity_minted = base_amount;
+		} else {
+			// todo: overflow fix
+			quote_amount = pool_quote_amount * base_amount / pool_base_amount;
+			liquidity_minted = tp.liquidity_token_issued_amount * base_amount / pool_base_amount;
+		}
+
+		ensure!(quote_amount > Zero::zero(), Error::<T>::QuoteAmountIsZero);
+		ensure!(liquidity_minted > Zero::zero(), Error::<T>::LiquidityMintedIsZero);
+		// ensure!(pool_base_amount * quote_amount == pool_quote_amount * base_amount, Error::<T>::LiquidityProportionInvalid);
+
+		<token::Module<T>>::ensure_free_balance(sender.clone(), tp.quote, quote_amount)?;
+		<token::Module<T>>::ensure_free_balance(tp.account.clone(), tp.liquidity_token_hash, liquidity_minted)?;
+
+		<token::Module<T>>::do_transfer(sender.clone(), tp.account.clone(), tp.base, base_amount, None)?;
+		<token::Module<T>>::do_transfer(sender.clone(), tp.account.clone(), tp.quote, quote_amount, None)?;
+		<token::Module<T>>::do_transfer(tp.account.clone(), sender.clone(), tp.liquidity_token_hash, liquidity_minted, None)?;
+
+		tp.liquidity_token_issued_amount = tp.liquidity_token_issued_amount + liquidity_minted;
+		<TradePairs<T>>::insert(hash, tp);
+
+		Self::deposit_event(RawEvent::LiquidityAdded(sender, hash));
+
+		Ok(())
+	}
+
+	fn do_remove_liquidity(sender: T::AccountId, hash: T::Hash, liquidity_token_amount: T::Balance) -> dispatch::DispatchResult {
+		
+		let mut tp = Self::trade_pair(hash).ok_or(Error::<T>::NoMatchingTradePair)?;
+
+		ensure!(liquidity_token_amount <= tp.liquidity_token_issued_amount, Error::<T>::LiquidityTokenAmountOverflow);
+
+		ensure!(liquidity_token_amount > Zero::zero(), Error::<T>::LiquidityTokenAmountIsZero);		
+		ensure!(tp.liquidity_token_issued_amount > Zero::zero(), Error::<T>::LiquidityTokenIssuedAmountIsZero);		
+
+		let pool_base_amount = <token::Module<T>>::balance_of((tp.account.clone(), tp.base));
+		let pool_quote_amount = <token::Module<T>>::balance_of((tp.account.clone(), tp.quote));
+		ensure!(pool_base_amount > Zero::zero(), Error::<T>::PoolBaseAmountIsZero);
+		ensure!(pool_quote_amount > Zero::zero(), Error::<T>::PoolQuoteAmountIsZero);
+
+		let base_amount = pool_base_amount * liquidity_token_amount / tp.liquidity_token_issued_amount;
+		let quote_amount = pool_quote_amount * liquidity_token_amount / tp.liquidity_token_issued_amount;
+		ensure!(quote_amount > Zero::zero(), Error::<T>::QuoteAmountIsZero);
+		ensure!(base_amount > Zero::zero(), Error::<T>::BaseAmountIsZero);
+
+		<token::Module<T>>::ensure_free_balance(tp.account.clone(), tp.base, base_amount)?;
+		<token::Module<T>>::ensure_free_balance(tp.account.clone(), tp.quote, quote_amount)?;
+		<token::Module<T>>::ensure_free_balance(sender.clone(), tp.liquidity_token_hash, liquidity_token_amount)?;
+
+		<token::Module<T>>::do_transfer(tp.account.clone(), sender.clone(), tp.base, base_amount, None)?;
+		<token::Module<T>>::do_transfer(tp.account.clone(), sender.clone(), tp.quote, quote_amount, None)?;
+		<token::Module<T>>::do_transfer(sender.clone(), tp.account.clone(), tp.liquidity_token_hash, liquidity_token_amount, None)?;
+
+		tp.liquidity_token_issued_amount = tp.liquidity_token_issued_amount - liquidity_token_amount;
+		<TradePairs<T>>::insert(hash, tp);
+
+		Self::deposit_event(RawEvent::LiquidityRemoved(sender, hash));
+
+		Ok(())
+	}
+
+	fn do_swap_buy(sender: T::AccountId, hash: T::Hash, base_amount: T::Balance) -> dispatch::DispatchResult {
+
 		let tp = Self::trade_pair(hash).ok_or(Error::<T>::NoMatchingTradePair)?;
 
+		let pool_base_amount = <token::Module<T>>::balance_of((tp.account.clone(), tp.base));
+		let pool_quote_amount = <token::Module<T>>::balance_of((tp.account.clone(), tp.quote));
+		ensure!(pool_base_amount > Zero::zero(), Error::<T>::PoolBaseAmountIsZero);
+		ensure!(pool_quote_amount > Zero::zero(), Error::<T>::PoolQuoteAmountIsZero);
 
+		// todo: add fee support
+		let quote_amount = pool_quote_amount - pool_quote_amount * pool_base_amount / (pool_base_amount + base_amount);
+
+		ensure!(quote_amount > Zero::zero(), Error::<T>::QuoteAmountIsZero);
+		ensure!(base_amount > Zero::zero(), Error::<T>::BaseAmountIsZero);
+
+		<token::Module<T>>::ensure_free_balance(sender.clone(), tp.base, base_amount)?;
+		<token::Module<T>>::ensure_free_balance(tp.account.clone(), tp.quote, quote_amount)?;
+
+		<token::Module<T>>::do_transfer(sender.clone(), tp.account.clone(), tp.base, base_amount, None)?;
+		<token::Module<T>>::do_transfer(tp.account.clone(), sender.clone(), tp.quote, quote_amount, None)?;
+
+		Self::deposit_event(RawEvent::SwapBuy(sender, hash));
+
+		Ok(())
+	}
+
+	fn do_swap_sell(sender: T::AccountId, hash: T::Hash, quote_amount: T::Balance) -> dispatch::DispatchResult {
+
+		let tp = Self::trade_pair(hash).ok_or(Error::<T>::NoMatchingTradePair)?;
+
+		let pool_base_amount = <token::Module<T>>::balance_of((tp.account.clone(), tp.base));
+		let pool_quote_amount = <token::Module<T>>::balance_of((tp.account.clone(), tp.quote));
+		ensure!(pool_base_amount > Zero::zero(), Error::<T>::PoolBaseAmountIsZero);
+		ensure!(pool_quote_amount > Zero::zero(), Error::<T>::PoolQuoteAmountIsZero);
+
+		let base_amount = pool_base_amount - pool_quote_amount * pool_base_amount / (pool_quote_amount + quote_amount);
+
+		ensure!(quote_amount > Zero::zero(), Error::<T>::QuoteAmountIsZero);
+		ensure!(base_amount > Zero::zero(), Error::<T>::BaseAmountIsZero);
+
+		<token::Module<T>>::ensure_free_balance(tp.account.clone(), tp.base, base_amount)?;
+		<token::Module<T>>::ensure_free_balance(sender.clone(), tp.quote, quote_amount)?;
+
+		<token::Module<T>>::do_transfer(tp.account.clone(), sender.clone(), tp.base, base_amount, None)?;
+		<token::Module<T>>::do_transfer(sender.clone(), tp.account.clone(), tp.quote, quote_amount, None)?;
+
+		Self::deposit_event(RawEvent::SwapSell(sender, hash));
 
 		Ok(())
 	}
 }
-
 
 
 

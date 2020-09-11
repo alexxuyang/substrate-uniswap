@@ -97,7 +97,7 @@ decl_module! {
             -> dispatch::DispatchResult {
             let sender = ensure_signed(origin)?;
 
-            Self::do_transfer(sender.clone(), token_hash, to.clone(), amount, memo)?;
+            Self::do_transfer(sender.clone(), to.clone(), token_hash, amount, memo)?;
             Self::deposit_event(RawEvent::Transferd(sender, to, token_hash, amount));
 
             Ok(())
@@ -134,8 +134,8 @@ impl<T: Trait> Module<T> {
 
 	pub fn do_transfer(
 		sender: T::AccountId,
-		hash: T::Hash,
 		to: T::AccountId,
+		hash: T::Hash,
 		amount: T::Balance,
 		memo: Option<Vec<u8>>,
 	) -> dispatch::DispatchResult {
@@ -242,16 +242,16 @@ impl<T: Trait> Module<T> {
 		Ok(())
 	}
 
-	pub fn ensure_free_balance(sender: T::AccountId, hash: T::Hash, amount: T::Balance) -> dispatch::DispatchResult {
+	pub fn ensure_free_balance(owner: T::AccountId, hash: T::Hash, amount: T::Balance) -> dispatch::DispatchResult {
 		let token = Self::token(hash);
 		ensure!(token.is_some(), Error::<T>::NoMatchingToken);
 
 		ensure!(
-            FreeBalanceOf::<T>::contains_key((sender.clone(), hash.clone())),
+            FreeBalanceOf::<T>::contains_key((owner.clone(), hash.clone())),
             Error::<T>::SenderHaveNoToken
         );
 
-		let free_amount = Self::free_balance_of((sender.clone(), hash.clone()));
+		let free_amount = Self::free_balance_of((owner.clone(), hash.clone()));
 		ensure!(
             free_amount >= amount,
             Error::<T>::BalanceNotEnough
