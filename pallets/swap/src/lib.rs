@@ -2,7 +2,7 @@
 
 use sp_runtime::{traits::{Bounded, Member, Zero, Hash, AtLeast32Bit}};
 use frame_support::{decl_module, decl_storage, decl_event, decl_error, dispatch, Parameter,
-					ensure, traits::{Randomness, Currency}};
+					ensure, traits::{Randomness}};
 use frame_system::ensure_signed;
 use sp_io::hashing::blake2_256;
 
@@ -17,7 +17,6 @@ mod tests;
 pub trait Trait: token::Trait + frame_system::Trait {
 	type Event: From<Event<Self>> + Into<<Self as frame_system::Trait>::Event>;
 	type Price: Parameter + Default + Member + Bounded + AtLeast32Bit + Copy + From<u128> + Into<u128>;
-	type Currency: Currency<Self::AccountId>;
 }
 
 #[derive(Encode, Decode, Clone, PartialEq, Eq)]
@@ -36,8 +35,6 @@ pub enum OrderType {
 	Buy, // give base, get quote
 	Sell,
 }
-
-pub type BalanceOf<T> = <<T as Trait>::Currency as Currency<<T as frame_system::Trait>::AccountId>>::Balance;
 
 decl_storage! {
 	trait Store for Module<T: Trait> as TemplateModule {
@@ -59,10 +56,8 @@ decl_event!(
 	where
 		<T as frame_system::Trait>::AccountId,
 		<T as frame_system::Trait>::Hash,
-		// Balance = <<T as Trait>::Currency as Currency<<T as frame_system::Trait>::AccountId>>::Balance,
-		TradePair = TradePair<T>,
 	{
-		TradePairCreated(AccountId, Hash, TradePair),
+		TradePairCreated(AccountId, Hash),
 		LiquidityAdded(AccountId, Hash),
 		LiquidityRemoved(AccountId, Hash),
 		SwapBuy(AccountId, Hash),
@@ -179,7 +174,7 @@ impl<T: Trait> Module<T> {
 		// todo: provide real symbol string
 		let liquidity_token_hash = <token::Module<T>>::do_issue(account.clone(), b"lt_hash".to_vec(), T::Balance::max_value())?;
 
-		let tp = TradePair {
+		let tp: TradePair<T> = TradePair {
 			hash, base, quote, account, liquidity_token_hash,
 			liquidity_token_issued_amount: Zero::zero(),
 		};
@@ -192,7 +187,7 @@ impl<T: Trait> Module<T> {
 		TradePairsHashByIndex::<T>::insert(index, hash);
 		TradePairsIndex::mutate(|n| *n += 1);
 
-		Self::deposit_event(RawEvent::TradePairCreated(sender, hash, tp));
+		Self::deposit_event(RawEvent::TradePairCreated(sender, hash));
 
 		Ok(())
 	}
@@ -288,6 +283,7 @@ impl<T: Trait> Module<T> {
 		ensure!(pool_quote_amount > Zero::zero(), Error::<T>::PoolQuoteAmountIsZero);
 
 		// todo: add fee support
+		// todo: deal with remainder: round up or round down
 		let quote_amount = pool_quote_amount - pool_quote_amount * pool_base_amount / (pool_base_amount + base_amount);
 
 		ensure!(quote_amount > Zero::zero(), Error::<T>::QuoteAmountIsZero);

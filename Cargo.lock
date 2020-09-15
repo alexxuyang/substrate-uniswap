@@ -3586,6 +3586,7 @@ version = "2.0.0-rc6"
 dependencies = [
  "frame-support",
  "frame-system",
+ "pallet-balances",
  "pallet-randomness-collective-flip",
  "pallet-token",
  "parity-scale-codec",

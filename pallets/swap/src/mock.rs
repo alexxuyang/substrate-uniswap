@@ -4,7 +4,9 @@ use frame_support::{impl_outer_origin, parameter_types, weights::Weight};
 use sp_runtime::{
 	traits::{BlakeTwo256, IdentityLookup}, testing::Header, Perbill,
 };
+
 use frame_system as system;
+use pallet_balances as balances;
 
 impl_outer_origin! {
 	pub enum Origin for Test {}
@@ -43,17 +45,38 @@ impl system::Trait for Test {
 	type AvailableBlockRatio = AvailableBlockRatio;
 	type Version = ();
 	type ModuleToIndex = ();
-	type AccountData = ();
+	type AccountData = balances::AccountData<u128>;
 	type OnNewAccount = ();
 	type OnKilledAccount = ();
 	type SystemWeightInfo = ();
 }
 
+parameter_types! {
+	pub const ExistentialDeposit: u64 = 1;
+}
+
+impl balances::Trait for Test {
+	type Balance = u128;
+	type DustRemoval = ();
+	type Event = ();
+	type ExistentialDeposit = ExistentialDeposit;
+	type AccountStore = system::Module<Test>;
+	type WeightInfo = ();
+}
+
 impl Trait for Test {
+	type Event = ();
+	type Price = u128;
+}
+
+impl token::Trait for Test {
 	type Event = ();
 }
 
-pub type TemplateModule = Module<Test>;
+pub type SwapModule = Module<Test>;
+pub type TokenModule = token::Module<Test>;
+pub type System = system::Module<Test>;
+pub type Balances = balances::Module<Test>;
 
 // Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
