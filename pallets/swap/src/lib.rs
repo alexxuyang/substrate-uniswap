@@ -56,8 +56,9 @@ decl_event!(
 	where
 		<T as frame_system::Trait>::AccountId,
 		<T as frame_system::Trait>::Hash,
+		TradePair = TradePair<T>,
 	{
-		TradePairCreated(AccountId, Hash),
+		TradePairCreated(AccountId, Hash, TradePair),
 		LiquidityAdded(AccountId, Hash),
 		LiquidityRemoved(AccountId, Hash),
 		SwapBuy(AccountId, Hash),
@@ -187,7 +188,7 @@ impl<T: Trait> Module<T> {
 		TradePairsHashByIndex::<T>::insert(index, hash);
 		TradePairsIndex::mutate(|n| *n += 1);
 
-		Self::deposit_event(RawEvent::TradePairCreated(sender, hash));
+		Self::deposit_event(RawEvent::TradePairCreated(sender, hash, tp));
 
 		Ok(())
 	}
