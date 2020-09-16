@@ -85,13 +85,13 @@ fn swap_tests() {
 		assert_eq!(TokenModule::balance_of((tp.account, token2.hash)), 180000); // 100 * 300 + 500 * 300
 
 		// alice swap buy
-		assert_ok!(SwapModule::do_swap_buy(alice, tp.hash, 13)); // 13 eth for 3818 usdt
+		assert_ok!(SwapModule::do_swap_buy(alice, tp.hash, 13)); // 13 eth for 3817 usdt
 		tp = SwapModule::trade_pair(tp_hash).unwrap();
 		assert_eq!(tp.liquidity_token_issued_amount, 100 + 500);
 
 		assert_eq!(TokenModule::balance_of((alice, tp.liquidity_token_hash)), 100);
 		assert_eq!(TokenModule::balance_of((alice, token1.hash)), 19999887); // 19999900 - 13
-		assert_eq!(TokenModule::balance_of((alice, token2.hash)), 4973818);  // 4970000 + 3818
+		assert_eq!(TokenModule::balance_of((alice, token2.hash)), 4973817);  // 4970000 + 3817
 
 		assert_eq!(TokenModule::balance_of((bob, tp.liquidity_token_hash)), 500);
 		assert_eq!(TokenModule::balance_of((bob, token1.hash)), 999500);  // 1000000 - 500
@@ -99,71 +99,71 @@ fn swap_tests() {
 
 		assert_eq!(TokenModule::balance_of((tp.account, tp.liquidity_token_hash)), u128::max_value() - 600);
 		assert_eq!(TokenModule::balance_of((tp.account, token1.hash)), 613);    // 600 + 13
-		assert_eq!(TokenModule::balance_of((tp.account, token2.hash)), 176182); // 180000 - 3818
+		assert_eq!(TokenModule::balance_of((tp.account, token2.hash)), 176183); // 180000 - 3817
 
 		// bob swap sell
-		assert_ok!(SwapModule::do_swap_sell(bob, tp.hash, 539)); // 539 usdt for 2 eth
+		assert_ok!(SwapModule::do_swap_sell(bob, tp.hash, 539)); // 539 usdt for 1 eth
 		tp = SwapModule::trade_pair(tp_hash).unwrap();
 		assert_eq!(tp.liquidity_token_issued_amount, 100 + 500);
 
 		assert_eq!(TokenModule::balance_of((alice, tp.liquidity_token_hash)), 100);
 		assert_eq!(TokenModule::balance_of((alice, token1.hash)), 19999887); // 19999900 - 13
-		assert_eq!(TokenModule::balance_of((alice, token2.hash)), 4973818);  // 4970000 + 3818
+		assert_eq!(TokenModule::balance_of((alice, token2.hash)), 4973817);  // 4970000 + 3817
 
 		assert_eq!(TokenModule::balance_of((bob, tp.liquidity_token_hash)), 500);
-		assert_eq!(TokenModule::balance_of((bob, token1.hash)), 999502);  // 999500 + 2
+		assert_eq!(TokenModule::balance_of((bob, token1.hash)), 999501);  // 999500 + 1
 		assert_eq!(TokenModule::balance_of((bob, token2.hash)), 4849461); // 4850000 - 539
 
 		assert_eq!(TokenModule::balance_of((tp.account, tp.liquidity_token_hash)), u128::max_value() - 600);
-		assert_eq!(TokenModule::balance_of((tp.account, token1.hash)), 611);    // 613 - 2
-		assert_eq!(TokenModule::balance_of((tp.account, token2.hash)), 176721); // 176182 + 539
+		assert_eq!(TokenModule::balance_of((tp.account, token1.hash)), 612);    // 613 - 1
+		assert_eq!(TokenModule::balance_of((tp.account, token2.hash)), 176722); // 176183 + 539
 
 		// alice add liquidity
-		assert_ok!(SwapModule::do_add_liquidity(alice, tp.hash, 477, None)); // 477 eth & 137963 usdt
+		assert_ok!(SwapModule::do_add_liquidity(alice, tp.hash, 477, None)); // 477 eth & 137739 usdt
 		tp = SwapModule::trade_pair(tp_hash).unwrap();
-		assert_eq!(tp.liquidity_token_issued_amount, 1068); // 600 + 468
+		assert_eq!(tp.liquidity_token_issued_amount, 1067); // 600 + 467
 
-		assert_eq!(TokenModule::balance_of((alice, tp.liquidity_token_hash)), 568); // 100 + 468
+		assert_eq!(TokenModule::balance_of((alice, tp.liquidity_token_hash)), 567); // 100 + 467
 		assert_eq!(TokenModule::balance_of((alice, token1.hash)), 19999410); // 19999887 - 477
-		assert_eq!(TokenModule::balance_of((alice, token2.hash)), 4835855);  // 4973818 - 137963
+		assert_eq!(TokenModule::balance_of((alice, token2.hash)), 4836078);  // 4973817 - 137739
 
 		assert_eq!(TokenModule::balance_of((bob, tp.liquidity_token_hash)), 500);
-		assert_eq!(TokenModule::balance_of((bob, token1.hash)), 999502);  // 999500 + 2
+		assert_eq!(TokenModule::balance_of((bob, token1.hash)), 999501);  // 999500 + 1
 		assert_eq!(TokenModule::balance_of((bob, token2.hash)), 4849461); // 4850000 - 539
 
-		assert_eq!(TokenModule::balance_of((tp.account, tp.liquidity_token_hash)), u128::max_value() - 600 - 468);
-		assert_eq!(TokenModule::balance_of((tp.account, token1.hash)), 1088);    // 611 + 477
-		assert_eq!(TokenModule::balance_of((tp.account, token2.hash)), 314684);  // 176721 + 137963
+		assert_eq!(TokenModule::balance_of((tp.account, tp.liquidity_token_hash)), u128::max_value() - 600 - 467);
+		assert_eq!(TokenModule::balance_of((tp.account, token1.hash)), 1089);    // 612 + 477
+		assert_eq!(TokenModule::balance_of((tp.account, token2.hash)), 314461);  // 176722 + 137739
 
 		// bob remove liquidity
-		assert_ok!(SwapModule::do_remove_liquidity(bob, tp.hash, 500)); // 509 eth & 147323 usdt
+		assert_ok!(SwapModule::do_remove_liquidity(bob, tp.hash, 500)); // 510 eth & 147357 usdt
 		tp = SwapModule::trade_pair(tp_hash).unwrap();
-		assert_eq!(tp.liquidity_token_issued_amount, 568); // 1068 - 500
+		assert_eq!(tp.liquidity_token_issued_amount, 567); // 1067 - 500
 
-		assert_eq!(TokenModule::balance_of((alice, tp.liquidity_token_hash)), 568); // 100 + 468
+		assert_eq!(TokenModule::balance_of((alice, tp.liquidity_token_hash)), 567); // 100 + 467
 		assert_eq!(TokenModule::balance_of((alice, token1.hash)), 19999410); // 19999887 - 477
-		assert_eq!(TokenModule::balance_of((alice, token2.hash)), 4835855);  // 4973818 - 137963
+		assert_eq!(TokenModule::balance_of((alice, token2.hash)), 4836078);  // 4973817 - 137739
 
 		assert_eq!(TokenModule::balance_of((bob, tp.liquidity_token_hash)), 0);
-		assert_eq!(TokenModule::balance_of((bob, token1.hash)), 1000011);  // 999502 + 509
-		assert_eq!(TokenModule::balance_of((bob, token2.hash)), 4996784); // 4849461 + 147323
+		assert_eq!(TokenModule::balance_of((bob, token1.hash)), 1000011);  // 999501 + 510
+		assert_eq!(TokenModule::balance_of((bob, token2.hash)), 4996818); // 4849461 + 147357
 
-		assert_eq!(TokenModule::balance_of((tp.account, tp.liquidity_token_hash)), u128::max_value() - 568);
-		assert_eq!(TokenModule::balance_of((tp.account, token1.hash)), 579);    // 1088 - 509
-		assert_eq!(TokenModule::balance_of((tp.account, token2.hash)), 167361);  // 314684 - 147323
+		assert_eq!(TokenModule::balance_of((tp.account, tp.liquidity_token_hash)), u128::max_value() - 567);
+		assert_eq!(TokenModule::balance_of((tp.account, token1.hash)), 579);    // 1089 - 510
+		assert_eq!(TokenModule::balance_of((tp.account, token2.hash)), 167104);  // 314461 - 147357
 
 		// alice remove liquidity
-		assert_ok!(SwapModule::do_remove_liquidity(alice, tp.hash, 568)); // 579 eth & 167361 usdt
+		assert_ok!(SwapModule::do_remove_liquidity(alice, tp.hash, 567)); // 579 eth & 167104 usdt
 		tp = SwapModule::trade_pair(tp_hash).unwrap();
 		assert_eq!(tp.liquidity_token_issued_amount, 0);
 
-		assert_eq!(TokenModule::balance_of((alice, tp.liquidity_token_hash)), 0); // 100 + 468
+		assert_eq!(TokenModule::balance_of((alice, tp.liquidity_token_hash)), 0);
 		assert_eq!(TokenModule::balance_of((alice, token1.hash)), 19999989); // 19999410 + 579
-		assert_eq!(TokenModule::balance_of((alice, token2.hash)), 5003216);  // 4835855 + 167361
+		assert_eq!(TokenModule::balance_of((alice, token2.hash)), 5003182);  // 4836078 + 167104
 
 		assert_eq!(TokenModule::balance_of((bob, tp.liquidity_token_hash)), 0);
-		assert_eq!(TokenModule::balance_of((bob, token1.hash)), 1000011);  // 999502 + 509
-		assert_eq!(TokenModule::balance_of((bob, token2.hash)), 4996784); // 4849461 + 147323
+		assert_eq!(TokenModule::balance_of((bob, token1.hash)), 1000011);  // 999501 + 510
+		assert_eq!(TokenModule::balance_of((bob, token2.hash)), 4996818); // 4849461 + 147357
 
 		assert_eq!(TokenModule::balance_of((tp.account, tp.liquidity_token_hash)), u128::max_value());
 		assert_eq!(TokenModule::balance_of((tp.account, token1.hash)), 0);

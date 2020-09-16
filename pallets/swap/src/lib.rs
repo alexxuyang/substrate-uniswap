@@ -284,7 +284,8 @@ impl<T: Trait> Module<T> {
 
 		// todo: add fee support
 		// todo: deal with remainder: round up or round down
-		let quote_amount = pool_quote_amount - pool_quote_amount * pool_base_amount / (pool_base_amount + base_amount);
+		let quote_amount = (pool_quote_amount * (pool_base_amount + base_amount) - pool_quote_amount * pool_base_amount)
+							/ (pool_base_amount + base_amount);
 
 		ensure!(quote_amount > Zero::zero(), Error::<T>::QuoteAmountIsZero);
 		ensure!(base_amount > Zero::zero(), Error::<T>::BaseAmountIsZero);
@@ -309,7 +310,8 @@ impl<T: Trait> Module<T> {
 		ensure!(pool_base_amount > Zero::zero(), Error::<T>::PoolBaseAmountIsZero);
 		ensure!(pool_quote_amount > Zero::zero(), Error::<T>::PoolQuoteAmountIsZero);
 
-		let base_amount = pool_base_amount - pool_quote_amount * pool_base_amount / (pool_quote_amount + quote_amount);
+		let base_amount = (pool_base_amount * (pool_quote_amount + quote_amount) - pool_quote_amount * pool_base_amount)
+							/ (pool_quote_amount + quote_amount);
 
 		ensure!(quote_amount > Zero::zero(), Error::<T>::QuoteAmountIsZero);
 		ensure!(base_amount > Zero::zero(), Error::<T>::BaseAmountIsZero);
