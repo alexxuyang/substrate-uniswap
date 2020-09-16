@@ -1,5 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use sp_std::{prelude::*};
 use sp_runtime::{traits::{Bounded, Member, Zero, Hash, AtLeast32Bit}};
 use frame_support::{decl_module, decl_storage, decl_event, decl_error, dispatch, Parameter,
 					ensure, traits::{Randomness}};
@@ -28,12 +29,6 @@ pub struct TradePair<T> where T: Trait {
 	liquidity_token_hash: T::Hash,
 	liquidity_token_issued_amount: T::Balance,
 	account: T::AccountId,
-}
-
-#[derive(Encode, Decode, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OrderType {
-	Buy, // give base, get quote
-	Sell,
 }
 
 decl_storage! {
@@ -72,6 +67,8 @@ decl_error! {
 		BaseEqualQuote,
         /// Token owner not found
         TokenOwnerNotFound,
+        /// Token not found
+        TokenNotFound,
         /// Sender not equal to base or quote owner
         SenderNotEqualToBaseOrQuoteOwner,
         /// Same trade pair with the given base and quote was already exist
@@ -149,15 +146,12 @@ impl<T: Trait> Module<T> {
 
 		ensure!(base != quote, Error::<T>::BaseEqualQuote);
 
-		let base_owner = <token::Module<T>>::owner(base);
-		let quote_owner = <token::Module<T>>::owner(quote);
-
-		ensure!(base_owner.is_some() && quote_owner.is_some(), Error::<T>::TokenOwnerNotFound);
-
-		let base_owner = base_owner.unwrap();
-		let quote_owner = quote_owner.unwrap();
-
+		let base_owner = <token::Module<T>>::owner(base).ok_or(Error::<T>::TokenOwnerNotFound)?;
+		let quote_owner = <token::Module<T>>::owner(quote).ok_or(Error::<T>::TokenOwnerNotFound)?;
 		ensure!(sender == base_owner || sender == quote_owner, Error::<T>::SenderNotEqualToBaseOrQuoteOwner);
+
+		let base_token = <token::Module<T>>::token(base).ok_or(Error::<T>::TokenNotFound)?;
+		let quote_token = <token::Module<T>>::token(base).ok_or(Error::<T>::TokenNotFound)?;
 
 		let bq = Self::trade_pair_hash_by_base_quote((base, quote));
 		let qb = Self::trade_pair_hash_by_base_quote((quote, base));
@@ -172,8 +166,13 @@ impl<T: Trait> Module<T> {
 
 		let account = Self::derivative_account_id(base, quote, hash);
 
-		// todo: provide real symbol string
-		let liquidity_token_hash = <token::Module<T>>::do_issue(account.clone(), b"lt_hash".to_vec(), T::Balance::max_value())?;
+		let mut lt_name = Vec::new();
+		lt_name.extend(b"LT_".to_vec());
+		lt_name.extend(base_token.symbol.clone());
+		lt_name.extend(b"_".to_vec());
+		lt_name.extend(quote_token.symbol.clone());
+
+		let liquidity_token_hash = <token::Module<T>>::do_issue(account.clone(), lt_name, T::Balance::max_value())?;
 
 		let tp: TradePair<T> = TradePair {
 			hash, base, quote, account, liquidity_token_hash,
@@ -284,7 +283,6 @@ impl<T: Trait> Module<T> {
 		ensure!(pool_quote_amount > Zero::zero(), Error::<T>::PoolQuoteAmountIsZero);
 
 		// todo: add fee support
-		// todo: deal with remainder: round up or round down
 		let quote_amount = (pool_quote_amount * (pool_base_amount + base_amount) - pool_quote_amount * pool_base_amount)
 							/ (pool_base_amount + base_amount);
 
