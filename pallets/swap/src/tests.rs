@@ -29,12 +29,12 @@ fn swap_tests() {
 		let bob = 20u64;
 
 		assert_ok!(TokenModule::do_issue(alice, b"6666".to_vec(), 21000000));
-		let token1_hash = TokenModule::owned_token((alice, 0)).unwrap();
+		let token1_hash = TokenModule::token_hash_by_index(0).unwrap();
 		let token1 = TokenModule::token(token1_hash).unwrap();
 		assert_eq!(TokenModule::balance_of((alice, token1.hash)), 21000000);
 
 		assert_ok!(TokenModule::do_issue(alice, b"8888".to_vec(), 10000000));
-		let token2_hash = TokenModule::owned_token((alice, 1)).unwrap();
+		let token2_hash = TokenModule::token_hash_by_index(1).unwrap();
 		let token2 = TokenModule::token(token2_hash).unwrap();
 		assert_eq!(TokenModule::balance_of((alice, token2.hash)), 10000000);
 

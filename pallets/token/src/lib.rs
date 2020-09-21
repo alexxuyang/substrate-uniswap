@@ -65,12 +65,15 @@ decl_storage! {
     trait Store for Module<T: Trait> as TokenModule {
         Tokens get(fn token): map hasher(blake2_128_concat) T::Hash => Option<Token<T::Hash, T::Balance>>;
         Owners get(fn owner): map hasher(blake2_128_concat) T::Hash => Option<T::AccountId>;
+
         BalanceOf get(fn balance_of): map hasher(blake2_128_concat) (T::AccountId, T::Hash) => T::Balance;
         FreeBalanceOf get(fn free_balance_of): map hasher(blake2_128_concat) (T::AccountId, T::Hash) => T::Balance;
         FreezedBalanceOf get(fn freezed_balance_of): map hasher(blake2_128_concat) (T::AccountId, T::Hash) => T::Balance;
 
-        OwnedTokens get(fn owned_token): map hasher(blake2_128_concat) (T::AccountId, u64) => Option<T::Hash>;
-        OwnedTokensIndex get(fn owned_token_index): map hasher(blake2_128_concat) T::AccountId => u64;
+		/// Index => TokenHash
+		TokenHashByIndex get(fn token_hash_by_index): map hasher(blake2_128_concat) u64 => Option<T::Hash>;
+		/// Index of tokens
+		TokenIndex get(fn token_index): u64;
 
         Nonce get(fn nonce): u64;
     }
@@ -125,20 +128,14 @@ impl<T: Trait> Module<T> {
 		BalanceOf::<T>::insert((sender.clone(), hash.clone()), total_supply);
 		FreeBalanceOf::<T>::insert((sender.clone(), hash.clone()), total_supply);
 
-		let owned_token_index = OwnedTokensIndex::<T>::get(sender.clone());
-		OwnedTokens::<T>::insert((sender.clone(), owned_token_index), hash);
-		OwnedTokensIndex::<T>::insert(sender.clone(), owned_token_index + 1);
+		let index = Self::token_index();
+		TokenHashByIndex::<T>::insert(index, hash);
+		TokenIndex::mutate(|n| *n += 1);
 
 		Ok(hash)
 	}
 
-	pub fn do_transfer(
-		sender: T::AccountId,
-		to: T::AccountId,
-		hash: T::Hash,
-		amount: T::Balance,
-		memo: Option<Vec<u8>>,
-	) -> dispatch::DispatchResult {
+	pub fn do_transfer(sender: T::AccountId, to: T::AccountId, hash: T::Hash, amount: T::Balance, memo: Option<Vec<u8>>) -> dispatch::DispatchResult {
 		let token = Self::token(hash);
 		ensure!(token.is_some(), Error::<T>::NoMatchingToken);
 

@@ -35,9 +35,8 @@ fn token_tests() {
 			b"6688".to_vec(),
 			21000000
 		));
-		assert_eq!(TokenModule::owned_token_index(alice), 1);
 
-		let token_hash = TokenModule::owned_token((alice, 0));
+		let token_hash = TokenModule::token_hash_by_index(0);
 		assert!(token_hash.is_some());
 		let token_hash = token_hash.unwrap();
 		let token = TokenModule::token(token_hash);
