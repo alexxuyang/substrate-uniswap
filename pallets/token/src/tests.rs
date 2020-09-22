@@ -43,34 +43,34 @@ fn token_tests() {
 		assert!(token.is_some());
 		let token = token.unwrap();
 
-		assert_eq!(TokenModule::balance_of((alice, token.hash)), 21000000);
-		assert_eq!(TokenModule::free_balance_of((alice, token.hash)), 21000000);
-		assert_eq!(TokenModule::freezed_balance_of((alice, token.hash)), 0);
+		assert_eq!(TokenModule::balance_of((alice, token.token_hash)), 21000000);
+		assert_eq!(TokenModule::free_balance_of((alice, token.token_hash)), 21000000);
+		assert_eq!(TokenModule::freezed_balance_of((alice, token.token_hash)), 0);
 
 		assert_ok!(TokenModule::transfer(
 			Origin::signed(alice),
-			token.hash,
+			token.token_hash,
 			bob,
 			100,
             None
 		));
-		assert_eq!(TokenModule::balance_of((alice, token.hash)), 20999900);
-		assert_eq!(TokenModule::free_balance_of((alice, token.hash)), 20999900);
-		assert_eq!(TokenModule::freezed_balance_of((alice, token.hash)), 0);
-		assert_eq!(TokenModule::balance_of((bob, token.hash)), 100);
-		assert_eq!(TokenModule::free_balance_of((bob, token.hash)), 100);
-		assert_eq!(TokenModule::freezed_balance_of((bob, token.hash)), 0);
+		assert_eq!(TokenModule::balance_of((alice, token.token_hash)), 20999900);
+		assert_eq!(TokenModule::free_balance_of((alice, token.token_hash)), 20999900);
+		assert_eq!(TokenModule::freezed_balance_of((alice, token.token_hash)), 0);
+		assert_eq!(TokenModule::balance_of((bob, token.token_hash)), 100);
+		assert_eq!(TokenModule::free_balance_of((bob, token.token_hash)), 100);
+		assert_eq!(TokenModule::freezed_balance_of((bob, token.token_hash)), 0);
 
 		assert_err!(
 			TokenModule::transfer(Origin::signed(bob), H256::from_low_u64_be(0), charlie, 101, None),
 			Error::<Test>::NoMatchingToken
 		);
 		assert_err!(
-			TokenModule::transfer(Origin::signed(charlie), token.hash, bob, 101, None),
+			TokenModule::transfer(Origin::signed(charlie), token.token_hash, bob, 101, None),
 			Error::<Test>::SenderHaveNoToken
 		);
 		assert_err!(
-			TokenModule::transfer(Origin::signed(bob), token.hash, charlie, 101, None),
+			TokenModule::transfer(Origin::signed(bob), token.token_hash, charlie, 101, None),
 			Error::<Test>::BalanceNotEnough
 		);
 	});

@@ -2,8 +2,7 @@
 
 use sp_std::{prelude::*};
 use sp_runtime::{traits::{Bounded, Member, Zero, Hash, AtLeast32Bit}};
-use frame_support::{decl_module, decl_storage, decl_event, decl_error, dispatch, Parameter,
-					ensure, traits::{Randomness}};
+use frame_support::{decl_module, decl_storage, decl_event, decl_error, dispatch, Parameter, ensure, traits::{Randomness}};
 use frame_system::ensure_signed;
 use sp_io::hashing::blake2_256;
 
@@ -23,7 +22,7 @@ pub trait Trait: token::Trait + frame_system::Trait {
 #[derive(Encode, Decode, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub struct TradePair<T> where T: Trait {
-	hash: T::Hash,
+	tp_hash: T::Hash,
 	base: T::Hash,
 	quote: T::Hash,
 	liquidity_token_hash: T::Hash,
@@ -175,7 +174,7 @@ impl<T: Trait> Module<T> {
 		let liquidity_token_hash = <token::Module<T>>::do_issue(account.clone(), lt_name, T::Balance::max_value())?;
 
 		let tp: TradePair<T> = TradePair {
-			hash, base, quote, account, liquidity_token_hash,
+			tp_hash: hash, base, quote, account, liquidity_token_hash,
 			liquidity_token_issued_amount: Zero::zero(),
 		};
 

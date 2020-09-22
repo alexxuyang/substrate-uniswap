@@ -22,7 +22,7 @@ mod tests;
 #[derive(Encode, Decode, Default, Clone, PartialEq)]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub struct Token<Hash, Balance> {
-	pub hash: Hash,
+	pub token_hash: Hash,
 	pub symbol: Vec<u8>,
 	pub total_supply: Balance,
 }
@@ -117,7 +117,7 @@ impl<T: Trait> Module<T> {
 			.using_encoded(<T as system::Trait>::Hashing::hash);
 
 		let token = Token::<T::Hash, T::Balance> {
-			hash: hash.clone(),
+			token_hash: hash.clone(),
 			total_supply,
 			symbol: symbol.clone(),
 		};
