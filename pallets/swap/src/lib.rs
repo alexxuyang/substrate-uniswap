@@ -131,6 +131,14 @@ decl_module! {
         }
 
         #[weight = 200_000]
+        pub fn add_liquidity_by_base_quote(origin, base: T::Hash, quote: T::Hash, base_amount: T::Balance, o_quote_amount: Option<T::Balance>) -> dispatch::DispatchResult {
+            let sender = ensure_signed(origin)?;
+            let hash = Self::trade_pair_hash_by_base_quote((base, quote)).ok_or(Error::<T>::NoMatchingTradePair)?;
+
+            Self::do_add_liquidity(sender, hash, base_amount, o_quote_amount)
+        }
+
+        #[weight = 200_000]
         pub fn remove_liquidity(origin, hash: T::Hash, liquidity_token_amount: T::Balance) -> dispatch::DispatchResult {
             let sender = ensure_signed(origin)?;
 
