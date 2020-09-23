@@ -1,16 +1,17 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use codec::{Decode, Encode};
-use sp_std::prelude::Vec;
-use sp_runtime::{traits::{Bounded, Hash}};
 use frame_support::{
-	decl_error, decl_event, decl_module, decl_storage, ensure, dispatch, StorageMap, StorageValue, traits::Randomness
+    decl_error, decl_event, decl_module, decl_storage, dispatch, ensure, traits::Randomness,
+    StorageMap, StorageValue,
 };
+use sp_runtime::traits::{Bounded, Hash};
+use sp_std::prelude::Vec;
 
 use frame_system::ensure_signed;
 
-use pallet_balances as balances;
 use frame_system as system;
+use pallet_balances as balances;
 use pallet_randomness_collective_flip as randomness_collective_flip;
 
 #[cfg(test)]
@@ -19,46 +20,53 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
-#[derive(Encode, Decode, Default, Clone, PartialEq)]
+#[derive(Encode, Decode, Clone, PartialEq)]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub struct Token<Hash, Balance> {
-	pub token_hash: Hash,
-	pub symbol: Vec<u8>,
-	pub total_supply: Balance,
+    pub token_hash: Hash,
+    pub symbol: Vec<u8>,
+    pub total_supply: Balance,
+    pub ttype: TokenType,
+}
+
+#[derive(Encode, Decode, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TokenType {
+    Normal,
+    Liquidity,
 }
 
 pub trait Trait: balances::Trait {
-	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
+    type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
 }
 
 decl_error! {
-	/// Error for the token module.
-	pub enum Error for Module<T: Trait> {
-		/// There is no match token
-		NoMatchingToken,
-		/// The balance is not enough
-		BalanceNotEnough,
-		/// Amount overflow
-		AmountOverflow,
-		/// Sender does not have token
-		SenderHaveNoToken,
-		/// Memo length exceed limitation
-		MemoLengthExceedLimitation,
-	}
+    /// Error for the token module.
+    pub enum Error for Module<T: Trait> {
+        /// There is no match token
+        NoMatchingToken,
+        /// The balance is not enough
+        BalanceNotEnough,
+        /// Amount overflow
+        AmountOverflow,
+        /// Sender does not have token
+        SenderHaveNoToken,
+        /// Memo length exceed limitation
+        MemoLengthExceedLimitation,
+    }
 }
 
 decl_event!(
-	pub enum Event<T>
+    pub enum Event<T>
     where
         <T as system::Trait>::AccountId,
         <T as system::Trait>::Hash,
         <T as balances::Trait>::Balance,
     {
-		Issued(AccountId, Hash, Balance),
+        Issued(AccountId, Hash, Balance),
         Transferd(AccountId, AccountId, Hash, Balance),
         Freezed(AccountId, Hash, Balance),
         UnFreezed(AccountId, Hash, Balance),
-	}
+    }
 );
 
 decl_storage! {
@@ -70,10 +78,10 @@ decl_storage! {
         FreeBalanceOf get(fn free_balance_of): map hasher(blake2_128_concat) (T::AccountId, T::Hash) => T::Balance;
         FreezedBalanceOf get(fn freezed_balance_of): map hasher(blake2_128_concat) (T::AccountId, T::Hash) => T::Balance;
 
-		/// Index => TokenHash
-		TokenHashByIndex get(fn token_hash_by_index): map hasher(blake2_128_concat) u64 => Option<T::Hash>;
-		/// Index of tokens
-		TokenIndex get(fn token_index): u64;
+        /// Index => TokenHash
+        TokenHashByIndex get(fn token_hash_by_index): map hasher(blake2_128_concat) u64 => Option<T::Hash>;
+        /// Index of tokens
+        TokenIndex get(fn token_index): u64;
 
         Nonce get(fn nonce): u64;
     }
@@ -85,17 +93,17 @@ decl_module! {
 
         type Error = Error<T>;
 
-		#[weight = 200_000]
+        #[weight = 200_000]
         pub fn issue(origin, symbol: Vec<u8>, total_supply: T::Balance) -> dispatch::DispatchResult {
-			let sender = ensure_signed(origin)?;
+            let sender = ensure_signed(origin)?;
 
-            let hash = Self::do_issue(sender.clone(), symbol, total_supply)?;
+            let hash = Self::do_issue(sender.clone(), symbol, total_supply, TokenType::Normal)?;
             Self::deposit_event(RawEvent::Issued(sender, hash.clone(), total_supply));
 
             Ok(())
         }
 
-		#[weight = 200_000]
+        #[weight = 200_000]
         pub fn transfer(origin, token_hash: T::Hash, to: T::AccountId, amount: T::Balance, memo: Option<Vec<u8>>)
             -> dispatch::DispatchResult {
             let sender = ensure_signed(origin)?;
@@ -109,151 +117,163 @@ decl_module! {
 }
 
 impl<T: Trait> Module<T> {
-	pub fn do_issue(sender: T::AccountId, symbol: Vec<u8>, total_supply: T::Balance) -> Result<T::Hash, dispatch::DispatchError> {
-		let nonce = Nonce::get();
+    pub fn do_issue(
+        sender: T::AccountId,
+        symbol: Vec<u8>,
+        total_supply: T::Balance,
+        ttype: TokenType,
+    ) -> Result<T::Hash, dispatch::DispatchError> {
+        let nonce = Nonce::get();
 
-		let random_seed = <randomness_collective_flip::Module<T>>::random_seed();
-		let hash = (random_seed, sender.clone(), nonce)
-			.using_encoded(<T as system::Trait>::Hashing::hash);
+        let random_seed = <randomness_collective_flip::Module<T>>::random_seed();
+        let hash =
+            (random_seed, sender.clone(), nonce).using_encoded(<T as system::Trait>::Hashing::hash);
 
-		let token = Token::<T::Hash, T::Balance> {
-			token_hash: hash.clone(),
-			total_supply,
-			symbol: symbol.clone(),
-		};
+        let token = Token::<T::Hash, T::Balance> {
+            token_hash: hash.clone(),
+            total_supply,
+            symbol: symbol.clone(),
+            ttype,
+        };
 
-		Nonce::mutate(|n| *n += 1);
-		Tokens::<T>::insert(hash.clone(), token);
-		Owners::<T>::insert(hash.clone(), sender.clone());
-		BalanceOf::<T>::insert((sender.clone(), hash.clone()), total_supply);
-		FreeBalanceOf::<T>::insert((sender.clone(), hash.clone()), total_supply);
+        Nonce::mutate(|n| *n += 1);
+        Tokens::<T>::insert(hash.clone(), token);
+        Owners::<T>::insert(hash.clone(), sender.clone());
+        BalanceOf::<T>::insert((sender.clone(), hash.clone()), total_supply);
+        FreeBalanceOf::<T>::insert((sender.clone(), hash.clone()), total_supply);
 
-		let index = Self::token_index();
-		TokenHashByIndex::<T>::insert(index, hash);
-		TokenIndex::mutate(|n| *n += 1);
+        let index = Self::token_index();
+        TokenHashByIndex::<T>::insert(index, hash);
+        TokenIndex::mutate(|n| *n += 1);
 
-		Ok(hash)
-	}
+        Ok(hash)
+    }
 
-	pub fn do_transfer(sender: T::AccountId, to: T::AccountId, hash: T::Hash, amount: T::Balance, memo: Option<Vec<u8>>) -> dispatch::DispatchResult {
-		let token = Self::token(hash);
-		ensure!(token.is_some(), Error::<T>::NoMatchingToken);
+    pub fn do_transfer(
+        sender: T::AccountId,
+        to: T::AccountId,
+        hash: T::Hash,
+        amount: T::Balance,
+        memo: Option<Vec<u8>>,
+    ) -> dispatch::DispatchResult {
+        let token = Self::token(hash);
+        ensure!(token.is_some(), Error::<T>::NoMatchingToken);
 
-		if let Some(memo) = memo {
-			ensure!(memo.len() <= 512, Error::<T>::MemoLengthExceedLimitation);
-		}
+        if let Some(memo) = memo {
+            ensure!(memo.len() <= 512, Error::<T>::MemoLengthExceedLimitation);
+        }
 
-		ensure!(
+        ensure!(
             <FreeBalanceOf<T>>::contains_key((sender.clone(), hash)),
             Error::<T>::SenderHaveNoToken
         );
 
-		let from_amount = Self::balance_of((sender.clone(), hash.clone()));
-		ensure!(from_amount >= amount, Error::<T>::BalanceNotEnough);
-		let new_from_amount = from_amount - amount;
+        let from_amount = Self::balance_of((sender.clone(), hash.clone()));
+        ensure!(from_amount >= amount, Error::<T>::BalanceNotEnough);
+        let new_from_amount = from_amount - amount;
 
-		let from_free_amount = Self::free_balance_of((sender.clone(), hash.clone()));
-		ensure!(
-            from_free_amount >= amount,
-            Error::<T>::BalanceNotEnough
-        );
-		let new_from_free_amount = from_free_amount - amount;
+        let from_free_amount = Self::free_balance_of((sender.clone(), hash.clone()));
+        ensure!(from_free_amount >= amount, Error::<T>::BalanceNotEnough);
+        let new_from_free_amount = from_free_amount - amount;
 
-		let to_amount = Self::balance_of((to.clone(), hash.clone()));
-		let new_to_amount = to_amount + amount;
-		ensure!(
+        let to_amount = Self::balance_of((to.clone(), hash.clone()));
+        let new_to_amount = to_amount + amount;
+        ensure!(
             new_to_amount <= T::Balance::max_value(),
             Error::<T>::AmountOverflow
         );
 
-		let to_free_amount = Self::free_balance_of((to.clone(), hash.clone()));
-		let new_to_free_amount = to_free_amount + amount;
-		ensure!(
+        let to_free_amount = Self::free_balance_of((to.clone(), hash.clone()));
+        let new_to_free_amount = to_free_amount + amount;
+        ensure!(
             new_to_free_amount <= T::Balance::max_value(),
             Error::<T>::AmountOverflow
         );
 
-		BalanceOf::<T>::insert((sender.clone(), hash.clone()), new_from_amount);
-		FreeBalanceOf::<T>::insert((sender.clone(), hash.clone()), new_from_free_amount);
-		BalanceOf::<T>::insert((to.clone(), hash.clone()), new_to_amount);
-		FreeBalanceOf::<T>::insert((to.clone(), hash.clone()), new_to_free_amount);
+        BalanceOf::<T>::insert((sender.clone(), hash.clone()), new_from_amount);
+        FreeBalanceOf::<T>::insert((sender.clone(), hash.clone()), new_from_free_amount);
+        BalanceOf::<T>::insert((to.clone(), hash.clone()), new_to_amount);
+        FreeBalanceOf::<T>::insert((to.clone(), hash.clone()), new_to_free_amount);
 
-		Ok(())
-	}
+        Ok(())
+    }
 
-	pub fn do_freeze(sender: T::AccountId, hash: T::Hash, amount: T::Balance) -> dispatch::DispatchResult {
-		let token = Self::token(hash);
-		ensure!(token.is_some(), Error::<T>::NoMatchingToken);
+    pub fn do_freeze(
+        sender: T::AccountId,
+        hash: T::Hash,
+        amount: T::Balance,
+    ) -> dispatch::DispatchResult {
+        let token = Self::token(hash);
+        ensure!(token.is_some(), Error::<T>::NoMatchingToken);
 
-		ensure!(
+        ensure!(
             FreeBalanceOf::<T>::contains_key((sender.clone(), hash)),
             Error::<T>::SenderHaveNoToken
         );
 
-		let old_free_amount = Self::free_balance_of((sender.clone(), hash.clone()));
-		ensure!(
-            old_free_amount >= amount,
-            Error::<T>::BalanceNotEnough
-        );
+        let old_free_amount = Self::free_balance_of((sender.clone(), hash.clone()));
+        ensure!(old_free_amount >= amount, Error::<T>::BalanceNotEnough);
 
-		let old_freezed_amount = Self::freezed_balance_of((sender.clone(), hash.clone()));
-		ensure!(
+        let old_freezed_amount = Self::freezed_balance_of((sender.clone(), hash.clone()));
+        ensure!(
             old_freezed_amount + amount <= T::Balance::max_value(),
             Error::<T>::AmountOverflow
         );
 
-		FreeBalanceOf::<T>::insert((sender.clone(), hash.clone()), old_free_amount - amount);
-		FreezedBalanceOf::<T>::insert((sender.clone(), hash.clone()), old_freezed_amount + amount);
+        FreeBalanceOf::<T>::insert((sender.clone(), hash.clone()), old_free_amount - amount);
+        FreezedBalanceOf::<T>::insert((sender.clone(), hash.clone()), old_freezed_amount + amount);
 
-		Self::deposit_event(RawEvent::Freezed(sender, hash, amount));
+        Self::deposit_event(RawEvent::Freezed(sender, hash, amount));
 
-		Ok(())
-	}
+        Ok(())
+    }
 
-	pub fn do_unfreeze(sender: T::AccountId, hash: T::Hash, amount: T::Balance) -> dispatch::DispatchResult {
-		let token = Self::token(hash);
-		ensure!(token.is_some(), Error::<T>::NoMatchingToken);
+    pub fn do_unfreeze(
+        sender: T::AccountId,
+        hash: T::Hash,
+        amount: T::Balance,
+    ) -> dispatch::DispatchResult {
+        let token = Self::token(hash);
+        ensure!(token.is_some(), Error::<T>::NoMatchingToken);
 
-		ensure!(
+        ensure!(
             FreeBalanceOf::<T>::contains_key((sender.clone(), hash)),
             Error::<T>::SenderHaveNoToken
         );
 
-		let old_freezed_amount = Self::freezed_balance_of((sender.clone(), hash.clone()));
-		ensure!(
-            old_freezed_amount >= amount,
-            Error::<T>::BalanceNotEnough
-        );
+        let old_freezed_amount = Self::freezed_balance_of((sender.clone(), hash.clone()));
+        ensure!(old_freezed_amount >= amount, Error::<T>::BalanceNotEnough);
 
-		let old_free_amount = Self::free_balance_of((sender.clone(), hash.clone()));
-		ensure!(
+        let old_free_amount = Self::free_balance_of((sender.clone(), hash.clone()));
+        ensure!(
             old_free_amount + amount <= T::Balance::max_value(),
             Error::<T>::AmountOverflow
         );
 
-		FreeBalanceOf::<T>::insert((sender.clone(), hash.clone()), old_free_amount + amount);
-		FreezedBalanceOf::<T>::insert((sender.clone(), hash.clone()), old_freezed_amount - amount);
+        FreeBalanceOf::<T>::insert((sender.clone(), hash.clone()), old_free_amount + amount);
+        FreezedBalanceOf::<T>::insert((sender.clone(), hash.clone()), old_freezed_amount - amount);
 
-		Self::deposit_event(RawEvent::UnFreezed(sender, hash, amount));
+        Self::deposit_event(RawEvent::UnFreezed(sender, hash, amount));
 
-		Ok(())
-	}
+        Ok(())
+    }
 
-	pub fn ensure_free_balance(owner: T::AccountId, hash: T::Hash, amount: T::Balance) -> dispatch::DispatchResult {
-		let token = Self::token(hash);
-		ensure!(token.is_some(), Error::<T>::NoMatchingToken);
+    pub fn ensure_free_balance(
+        owner: T::AccountId,
+        hash: T::Hash,
+        amount: T::Balance,
+    ) -> dispatch::DispatchResult {
+        let token = Self::token(hash);
+        ensure!(token.is_some(), Error::<T>::NoMatchingToken);
 
-		ensure!(
+        ensure!(
             FreeBalanceOf::<T>::contains_key((owner.clone(), hash.clone())),
             Error::<T>::SenderHaveNoToken
         );
 
-		let free_amount = Self::free_balance_of((owner.clone(), hash.clone()));
-		ensure!(
-            free_amount >= amount,
-            Error::<T>::BalanceNotEnough
-        );
+        let free_amount = Self::free_balance_of((owner.clone(), hash.clone()));
+        ensure!(free_amount >= amount, Error::<T>::BalanceNotEnough);
 
-		Ok(())
-	}
+        Ok(())
+    }
 }
