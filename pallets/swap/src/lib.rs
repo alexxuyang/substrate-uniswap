@@ -169,20 +169,8 @@ impl<T: Trait> Module<T> {
     ) -> dispatch::DispatchResult {
         ensure!(base != quote, Error::<T>::BaseEqualQuote);
 
-        let base_owner = <token::Module<T>>::owner(base).ok_or(Error::<T>::TokenOwnerNotFound)?;
-        let quote_owner = <token::Module<T>>::owner(quote).ok_or(Error::<T>::TokenOwnerNotFound)?;
-        ensure!(
-            sender == base_owner || sender == quote_owner,
-            Error::<T>::SenderNotEqualToBaseOrQuoteOwner
-        );
-
         let base_token = <token::Module<T>>::token(base).ok_or(Error::<T>::TokenNotFound)?;
-        let quote_token = <token::Module<T>>::token(base).ok_or(Error::<T>::TokenNotFound)?;
-
-        let bq = Self::trade_pair_hash_by_base_quote((base, quote));
-        let qb = Self::trade_pair_hash_by_base_quote((quote, base));
-
-        ensure!(!bq.is_some() && !qb.is_some(), Error::<T>::TradePairExisted);
+        let quote_token = <token::Module<T>>::token(quote).ok_or(Error::<T>::TokenNotFound)?;
 
         let nonce = Nonce::get();
 
