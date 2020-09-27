@@ -1,8 +1,10 @@
 use crate::{Module, Trait};
-use sp_core::H256;
 use frame_support::{impl_outer_origin, parameter_types, weights::Weight};
+use sp_core::H256;
 use sp_runtime::{
-	traits::{BlakeTwo256, IdentityLookup}, testing::Header, Perbill,
+	testing::Header,
+	traits::{BlakeTwo256, IdentityLookup},
+	Perbill,
 };
 
 use frame_system as system;
@@ -42,7 +44,7 @@ impl system::Trait for Test {
 	type AvailableBlockRatio = AvailableBlockRatio;
 	type MaximumBlockLength = MaximumBlockLength;
 	type Version = ();
-	type ModuleToIndex = ();
+	type PalletInfo = ();
 	type AccountData = balances::AccountData<u128>;
 	type OnNewAccount = ();
 	type OnKilledAccount = ();
@@ -51,10 +53,12 @@ impl system::Trait for Test {
 
 parameter_types! {
 	pub const ExistentialDeposit: u64 = 1;
+	pub const MaxLocks: u32 = 50;
 }
 
 impl balances::Trait for Test {
 	type Balance = u128;
+	type MaxLocks = MaxLocks;
 	type DustRemoval = ();
 	type Event = ();
 	type ExistentialDeposit = ExistentialDeposit;
@@ -71,5 +75,8 @@ pub type System = system::Module<Test>;
 pub type Balances = balances::Module<Test>;
 
 pub fn new_test_ext() -> sp_io::TestExternalities {
-	system::GenesisConfig::default().build_storage::<Test>().unwrap().into()
+	system::GenesisConfig::default()
+		.build_storage::<Test>()
+		.unwrap()
+		.into()
 }
